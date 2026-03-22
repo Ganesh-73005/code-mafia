@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (if not using Supabase)
+  postgres:
+    image: postgres:16.2
+    container_name: code-mafia-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: code_mafia
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - code-mafia-network
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: code-mafia-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - code-mafia-network
+    restart: unless-stopped
+
+  # Judge0 Database
+  judge0-db:
+    image: postgres:16.2
+    container_name: judge0-postgres
+    env_file: judge0.conf
+    volumes:
+      - judge0_postgres_data:/var/lib/postgresql/data/
+    networks:
+      - code-mafia-network
+    restart: unless-stopped
+
+  # Judge0 Server
+  judge0-server:
+    image: judge0/judge0:1.13.1
+    container_name: judge0-server
+    env_file: judge0.conf
+    ports:
+      - "2358:2358"
+    privileged: true
+    networks:
+      - code-mafia-network
+    depends_on:
+      - judge0-db
+      - redis
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=judge0-db
+      - POSTGRES_PORT=5432
+
+  # Judge0 Workers (for parallel execution)
+  judge0-worker:
+    image: judge0/judge0:1.13.1
+    container_name: judge0-worker
+    command: ["./scripts/workers"]
+    env_file: judge0.conf
+    privileged: true
+    networks:
+      - code-mafia-network
+    depends_on:
+      - judge0-db
+      - redis
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=judge0-db
+      - POSTGRES_PORT=5432
+
+  # Go Backend
+  go-backend:
+    build:
+      context: ./go-backend
+      dockerfile: Dockerfile
+    container_name: code-mafia-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgresql://postgres:CgfydH_84rBNQ5U@db.cumytusegtlzmepyqxov.supabase.co:5432/postgres
+      - REDIS_ADDRESS=redis:6379
+      - REDIS_PASSWORD=
+      - SECRET_KEY=your-secret-key-change-this-in-production
+      - JUDGE_ZERO_API=http://judge0-server:2358
+      - X_AUTH_TOKEN=
+    depends_on:
+      - redis
+      - judge0-server
+      - judge0-worker
+    networks:
+      - code-mafia-network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: code-mafia-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - go-backend
+    networks:
+      - code-mafia-network
+    restart: unless-stopped
+
+networks:
+  code-mafia-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  judge0_postgres_data:
+
