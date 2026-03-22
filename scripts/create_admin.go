@@ -15,7 +15,7 @@ import (
 
 func main() {
 	// MongoDB connection details
-	mongoURI := "mongodb+srv://ganeshsriramulu2:Ganesh73005@cluster0.a4zpgcx.mongodb.net/?appName=Cluster0"
+	mongoURI := ""
 	dbName := "code_mafia"
 
 	// Admin credentials
